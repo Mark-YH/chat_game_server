@@ -9,10 +9,15 @@ from _thread import *
 from time import sleep
 from game_1a2b import Game
 
+
 class Server:
     host = '127.0.0.1'
     port = 8001
-    conns = {}
+    conns = {}  # conn : username
+    player_list = []  # connections
+    turn = 0
+    playing = ''
+    game = None
 
     def __init__(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,12 +47,44 @@ class Server:
 
             start_new_thread(self.connection_thread, (conn,))
 
+    def game_start(self, conn):
+        self.game = Game()
+        self.broadcast(msg='User ' + self.conns[conn] + ' starts a game')
+        self.broadcast(msg='Enter {join 1a2b} to join the game')
+        print('Answer is', self.game.ans)
+
+    def game_guess(self, conn, guess):
+        result = self.game.guess(guess[1:5])
+        print(guess[1:5])
+        self.broadcast(msg=self.conns[conn] + ' guessed [' + guess[1:5] + '] and the result is: ')
+        self.broadcast(msg=result)
+        if result == 'BINGOO':
+            self.broadcast(msg='Congrats! The winner is: ' + self.conns[conn])
+            self.turn = 0
+        else:
+            self.turn += 1
+            self.turn %= len(self.player_list)
+            self.broadcast(msg='Now is ' + self.conns[self.player_list[self.turn]] + "'s turn")
+
     def connection_thread(self, conn):
         while True:
             try:
                 data = conn.recv(4096)
                 if data:
-                    self.broadcast(conn, bytes.decode(data))
+                    message = bytes.decode(data)
+                    if message == '{play 1a2b}':
+                        self.player_list.append(conn)
+                        self.playing = '1a2b'
+                        self.game_start(conn)
+                        print('Game start')
+                    elif message == '{join 1a2b}' and self.playing == '1a2b':
+                        self.player_list.append(conn)
+                        self.broadcast(msg=self.conns[conn] + ' joined the game')
+                    elif self.playing == '1a2b' and self.player_list[self.turn] == conn and \
+                            len(message) == 6 and message[0] == '{' and message[5] == '}':
+                        self.game_guess(conn, message)
+                    else:
+                        self.broadcast(conn, message)
                 else:
                     self.conns.pop(conn)
                     conn.close()
@@ -58,8 +95,11 @@ class Server:
                 conn.close()
                 break
 
-    def broadcast(self, conn, msg):
-        message = self.conns[conn] + ": " + msg
+    def broadcast(self, conn=None, msg=''):
+        if conn:
+            message = self.conns[conn] + ": " + msg
+        else:
+            message = "Server broadcast: " + msg
         print(message)
         try:
             for conn in self.conns.keys():
