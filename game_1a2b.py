@@ -8,13 +8,12 @@ import random
 
 
 class Game:
-    ans = ""
-    pool = []
-
-    def __init__(self):
+    def __init__(self, _digit_size=4):
+        self.pool = []
+        self.ans = ''
         for i in range(10):
             self.pool.append(i)
-        for i in range(4):
+        for i in range(_digit_size):
             self.ans += str(self.pool.pop(random.randint(0, len(self.pool) - 1)))
 
     @staticmethod
