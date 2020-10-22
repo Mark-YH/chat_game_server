@@ -48,19 +48,26 @@ class Server:
             start_new_thread(self.connection_thread, (conn,))
 
     def game_start(self, conn):
+        self.player_list.clear()
+        self.player_list.append(conn)
         self.game = Game()
         self.broadcast(msg='User ' + self.conns[conn] + ' starts a game')
         self.broadcast(msg='Enter {join 1a2b} to join the game')
         print('Answer is', self.game.ans)
 
     def game_guess(self, conn, guess):
-        result = self.game.guess(guess[1:5])
-        print(guess[1:5])
-        self.broadcast(msg=self.conns[conn] + ' guessed [' + guess[1:5] + '] and the result is: ')
-        self.broadcast(msg=result)
-        if result == 'BINGOO':
+        result = self.game.guess(guess[1:len(guess) - 1])
+        print(guess[1:len(guess) - 1])
+        self.broadcast(msg=self.conns[conn] + ' guessed [' + guess[1:len(guess) - 1] + '] and the result is: ')
+        self.broadcast(msg=result + '\r\n')
+        if result == 'BINGO':
             self.broadcast(msg='Congrats! The winner is: ' + self.conns[conn])
             self.turn = 0
+            self.player_list.clear()
+            self.game = None
+            self.playing = ''
+        elif len(result) != 4:
+            self.broadcast(msg='Oops. Try again! ' + self.conns[self.player_list[self.turn]])
         else:
             self.turn += 1
             self.turn %= len(self.player_list)
@@ -72,16 +79,19 @@ class Server:
                 data = conn.recv(4096)
                 if data:
                     message = bytes.decode(data)
-                    if message == '{play 1a2b}':
-                        self.player_list.append(conn)
+                    if message == '{play 1a2b}' and self.playing != '1a2b':
                         self.playing = '1a2b'
-                        self.game_start(conn)
+                        if message[10] == '-':
+                            digit = int(message[11])
+                        self.game_start(conn, digit)
                         print('Game start')
                     elif message == '{join 1a2b}' and self.playing == '1a2b':
-                        self.player_list.append(conn)
-                        self.broadcast(msg=self.conns[conn] + ' joined the game')
+                        if conn not in self.player_list:
+                            self.player_list.append(conn)
+                            self.broadcast(msg=self.conns[conn] + ' joined the game')
+                        print(len(self.player_list))
                     elif self.playing == '1a2b' and self.player_list[self.turn] == conn and \
-                            len(message) == 6 and message[0] == '{' and message[5] == '}':
+                            message[0] == '{' and message[-1] == '}':
                         self.game_guess(conn, message)
                     else:
                         self.broadcast(conn, message)
